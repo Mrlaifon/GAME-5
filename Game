@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Три в ряд</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html,body{ margin:0; padding:0; height:100%; overflow:hidden;
+    background: radial-gradient(circle at 50% 0%, #3a2a6d, #150c30 70%);
+    font-family: 'Segoe UI', Tahoma, sans-serif; color:#fff; }
+  #app{ position:relative; width:100%; height:100%; max-width:480px; margin:0 auto; overflow:hidden; }
+  .screen{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; padding:16px; opacity:1; transition:opacity .3s; }
+  .hidden{ display:none; }
+  h1{ font-size:2.1em; margin:0 0 6px; text-shadow:0 0 18px #ffd76a, 0 2px 4px #000; letter-spacing:1px; }
+  .subtitle{ opacity:.8; margin-bottom:22px; font-size:.95em; text-align:center; }
+  .btn{ background:linear-gradient(180deg,#ffd76a,#ff9a3c); color:#3a1d00; border:none;
+    border-radius:16px; padding:14px 26px; font-size:1.05em; font-weight:700; margin:8px 0;
+    width:min(280px,80vw); box-shadow:0 5px 0 #b5590a, 0 8px 16px rgba(0,0,0,.4);
+    cursor:pointer; transition:transform .08s; }
+  .btn:active{ transform:translateY(4px); box-shadow:0 1px 0 #b5590a; }
+  .btn.secondary{ background:linear-gradient(180deg,#7fd9ff,#3aa0e0); box-shadow:0 5px 0 #1a5f8a,0 8px 16px rgba(0,0,0,.4); color:#022; }
+  .btn.small{ width:auto; padding:8px 16px; font-size:.85em; }
+  .rules{ background:rgba(255,255,255,.08); border-radius:14px; padding:14px 18px; max-width:340px;
+    font-size:.85em; line-height:1.5em; margin-top:10px; border:1px solid rgba(255,255,255,.15); }
+  .rules b{ color:#ffd76a; }
+  #musicToggle{ position:absolute; top:14px; right:14px; font-size:1.4em; background:rgba(255,255,255,.12);
+    border-radius:50%; width:44px; height:44px; border:none; cursor:pointer; z-index:20; }
+  #levelGrid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; width:100%; max-width:340px; margin-top:10px; }
+  .lvl{ aspect-ratio:1; border-radius:12px; background:linear-gradient(180deg,#8f6bff,#5a35c9);
+    border:2px solid rgba(255,255,255,.25); display:flex; flex-direction:column; align-items:center;
+    justify-content:center; font-weight:700; font-size:1.2em; box-shadow:0 4px 0 #3a1f8f; }
+  .lvl.locked{ background:linear-gradient(180deg,#555,#333); color:#999; box-shadow:0 4px 0 #222; }
+  .lvl .star{ font-size:.6em; margin-top:2px; }
+  #backBtn{ position:absolute; top:14px; left:14px; z-index:20; }
+  #hud{ width:100%; max-width:400px; display:flex; justify-content:space-between; align-items:center;
+    padding:8px 10px; font-size:.95em; }
+  #hud .pill{ background:rgba(255,255,255,.12); border-radius:10px; padding:6px 12px; text-align:center; min-width:70px; }
+  #goalBar{ width:100%; max-width:400px; padding:0 10px 6px; font-size:.8em; opacity:.9; }
+  #board{ display:grid; gap:4px; padding:6px; background:rgba(0,0,0,.25); border-radius:16px;
+    box-shadow:inset 0 0 20px rgba(0,0,0,.5); touch-action:none; }
+  .cell{ display:flex; align-items:center; justify-content:center; border-radius:8px;
+    background:rgba(255,255,255,.06); font-size:1.6em; position:relative; transition:transform .15s; }
+  .cell.sel{ box-shadow:0 0 0 3px #ffd76a inset; transform:scale(1.06); }
+  .cell.pop{ animation:pop .25s forwards; }
+  @keyframes pop{ 0%{transform:scale(1);opacity:1;} 100%{transform:scale(1.6);opacity:0;} }
+  #overlay{ position:absolute; inset:0; background:rgba(10,5,30,.85); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; z-index:30; text-align:center; padding:20px;}
+  #overlay h2{ font-size:1.8em; margin-bottom:6px; }
+  #overlay p{ opacity:.85; margin-bottom:18px; }
+  footer{ position:absolute; bottom:6px; font-size:.7em; opacity:.5; }
+</style>
+</head>
+<body>
+<div id="app">
+  <button id="musicToggle">🔊</button>
+
+  <!-- START -->
+  <div id="startScreen" class="screen">
+    <h1>💎 Три в ряд</h1>
+    <div class="subtitle">Собирай ряды из 3+ одинаковых фигур</div>
+    <button class="btn" id="infiniteBtn">♾️ Бесконечный режим</button>
+    <button class="btn secondary" id="eventsBtn">🏆 Режим событий</button>
+    <div class="rules">
+      <b>Правила:</b><br>
+      Меняй местами соседние фигуры, чтобы собрать ряд из 3 и более одинаковых.<br>
+      💎🔷🍀👑🔴🟣 — 6 видов фигур.<br>
+      В бесконечном режиме ходы не заканчиваются — набирай очки без ограничений.<br>
+      В режиме событий у каждого уровня своя цель и ограниченное число ходов.
+    </div>
+  </div>
+
+  <!-- LEVEL SELECT -->
+  <div id="levelScreen" class="screen hidden">
+    <button class="btn small" id="backFromLevels">← Назад</button>
+    <h1 style="font-size:1.5em;">Режим событий</h1>
+    <div class="subtitle">Уровни 1–15</div>
+    <div id="levelGrid"></div>
+  </div>
+
+  <!-- GAME -->
+  <div id="gameScreen" class="screen hidden" style="justify-content:flex-start; padding-top:56px;">
+    <button class="btn small" id="backBtn">← Меню</button>
+    <div id="hud">
+      <div class="pill">Очки<br><b id="scoreVal">0</b></div>
+      <div class="pill">Ходы<br><b id="movesVal">∞</b></div>
+      <div class="pill">Цель<br><b id="goalVal">—</b></div>
+    </div>
+    <div id="goalBar"></div>
+    <div id="board"></div>
+
+    <div id="overlay" class="hidden">
+      <h2 id="overlayTitle"></h2>
+      <p id="overlayText"></p>
+      <button class="btn" id="overlayMain"></button>
+      <button class="btn secondary" id="overlayMenu">В меню</button>
+    </div>
+  </div>
+
+  <footer>Три в ряд · сделано для тебя</footer>
+</div>
+
+<script>
+(() => {
+"use strict";
+const SYMS = ["💎","🔷","🍀","👑","🔴","🟣"];
+const SIZE = 8;
+const CELL = Math.min(46, Math.floor((Math.min(480, innerWidth)-40)/SIZE));
+
+/* ---------- AUDIO ---------- */
+let actx, musicOn = true, musicTimer=null;
+function ac(){ if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); return actx; }
+function beep(freq, dur, type="sine", vol=.18){
+  if(!musicOn) return;
+  const c = ac(); const o=c.createOscillator(); const g=c.createGain();
+  o.type=type; o.frequency.value=freq; g.gain.value=vol;
+  o.connect(g); g.connect(c.destination);
+  o.start(); g.gain.exponentialRampToValueAtTime(.0001, c.currentTime+dur);
+  o.stop(c.currentTime+dur);
+}
+function sMatch(n){ beep(520+n*40, .18,"triangle",.15); }
+function sSwap(){ beep(300,.08,"square",.08); }
+function sBad(){ beep(140,.15,"sawtooth",.1); }
+function sWin(){ [523,659,784,1046].forEach((f,i)=>setTimeout(()=>beep(f,.3,"triangle",.16),i*120)); }
+function sLose(){ [400,300,200].forEach((f,i)=>setTimeout(()=>beep(f,.35,"sawtooth",.12),i*140)); }
+const scale=[261,293,329,349,392,440,493,523];
+function musicLoop(){
+  if(musicOn) beep(scale[Math.floor(Math.random()*scale.length)],.5,"sine",.045);
+  musicTimer = setTimeout(musicLoop, 650);
+}
+function startMusic(){ if(!musicTimer) musicLoop(); }
+document.getElementById("musicToggle").onclick = () => {
+  musicOn = !musicOn;
+  document.getElementById("musicToggle").textContent = musicOn ? "🔊" : "🔇";
+};
+
+/* ---------- LEVELS ---------- */
+const LEVELS = [
+ {n:1,type:"score",target:800,moves:20},
+ {n:2,type:"collect",sym:"👑",target:12,moves:20},
+ {n:3,type:"score",target:1800,moves:22},
+ {n:4,type:"collect",sym:"🔴",target:18,moves:22},
+ {n:5,type:"score",target:3000,moves:24},
+ {n:6,type:"collect",sym:"💎",target:22,moves:24},
+ {n:7,type:"score",target:4500,moves:25},
+ {n:8,type:"collect",sym:"🍀",target:28,moves:26},
+ {n:9,type:"score",target:6000,moves:26},
+ {n:10,type:"collect",sym:"🟣",target:32,moves:27},
+ {n:11,type:"score",target:8000,moves:28},
+ {n:12,type:"collect",sym:"👑",target:38,moves:29},
+ {n:13,type:"score",target:10500,moves:30},
+ {n:14,type:"collect",sym:"💎",target:45,moves:31},
+ {n:15,type:"score",target:15000,moves:34},
+];
+function unlocked(){ return parseInt(localStorage.getItem("m3_unlocked")||"1",10); }
+function setUnlocked(v){ localStorage.setItem("m3_unlocked", String(v)); }
+
+/* ---------- SCREENS ---------- */
+const el = id => document.getElementById(id);
+function show(id){ ["startScreen","levelScreen","gameScreen"].forEach(s=>el(s).classList.add("hidden")); el(id).classList.remove("hidden"); }
+el("infiniteBtn").onclick = () => startGame(null);
+el("eventsBtn").onclick = () => { renderLevels(); show("levelScreen"); };
+el("backFromLevels").onclick = () => show("startScreen");
+el("backBtn").onclick = () => { stopGame(); show("startScreen"); };
+el("overlayMenu").onclick = () => { stopGame(); show("startScreen"); };
+
+function renderLevels(){
+  const g = el("levelGrid"); g.innerHTML="";
+  const u = unlocked();
+  LEVELS.forEach(lv=>{
+    const d = document.createElement("div");
+    const locked = lv.n>u;
+    d.className = "lvl"+(locked?" locked":"");
+    d.innerHTML = locked ? "🔒" : (lv.n+"<div class='star'>"+(lv.type==="score"?"⭐"+lv.target:lv.sym+"×"+lv.target)+"</div>");
+    if(!locked) d.onclick = () => startGame(lv);
+    g.appendChild(d);
+  });
+}
+
+/* ---------- GAME STATE ---------- */
+let grid, sel=null, score=0, movesLeft=null, curLevel=null, collected={}, busy=false;
+
+function startGame(level){
+  curLevel = level; score=0; collected={}; busy=false; sel=null;
+  movesLeft = level ? level.moves : null;
+  el("scoreVal").textContent="0";
+  el("movesVal").textContent = movesLeft===null ? "∞" : movesLeft;
+  el("goalVal").textContent = level ? (level.type==="score" ? "⭐"+level.target : level.sym+"×"+level.target) : "Очки";
+  el("goalBar").textContent = level ? "Уровень "+level.n : "Собирай очки без ограничений!";
+  el("overlay").classList.add("hidden");
+  buildBoard();
+  show("gameScreen");
+  startMusic();
+}
+function stopGame(){ /* keep music running */ }
+
+function buildBoard(){
+  const boardEl = el("board");
+  boardEl.style.gridTemplateColumns = `repeat(${SIZE}, ${CELL}px)`;
+  boardEl.style.gridTemplateRows = `repeat(${SIZE}, ${CELL}px)`;
+  boardEl.innerHTML = "";
+  grid = [];
+  for(let r=0;r<SIZE;r++){
+    grid.push([]);
+    for(let c=0;c<SIZE;c++){
+      let s;
+      do { s = SYMS[Math.floor(Math.random()*SYMS.length)]; }
+      while(
+        (c>=2 && grid[r][c-1]===s && grid[r][c-2]===s) ||
+        (r>=2 && grid[r-1][c]===s && grid[r-2][c]===s)
+      );
+      grid[r].push(s);
+    }
+  }
+  renderBoard();
+}
+function renderBoard(){
+  const boardEl = el("board");
+  boardEl.innerHTML = "";
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+    const cell = document.createElement("div");
+    cell.className="cell"; cell.style.width=cell.style.height=CELL+"px";
+    cell.style.fontSize=(CELL*0.62)+"px";
+    cell.textContent = grid[r][c];
+    cell.dataset.r=r; cell.dataset.c=c;
+    cell.onclick = () => onCellClick(r,c,cell);
+    boardEl.appendChild(cell);
+  }
+}
+function cellEl(r,c){ return el("board").children[r*SIZE+c]; }
+
+function onCellClick(r,c,cellEl_){
+  if(busy) return;
+  if(!sel){ sel={r,c}; cellEl_.classList.add("sel"); return; }
+  const dr=Math.abs(sel.r-r), dc=Math.abs(sel.c-c);
+  const prev = cellEl(sel.r,sel.c); prev.classList.remove("sel");
+  if(sel.r===r && sel.c===c){ sel=null; return; }
+  if(dr+dc===1){ trySwap(sel.r,sel.c,r,c); sel=null; }
+  else { sel={r,c}; cellEl_.classList.add("sel"); }
+}
+function swapVals(r1,c1,r2,c2){ const t=grid[r1][c1]; grid[r1][c1]=grid[r2][c2]; grid[r2][c2]=t; }
+
+function trySwap(r1,c1,r2,c2){
+  swapVals(r1,c1,r2,c2);
+  const matches = findMatches();
+  if(matches.size===0){
+    swapVals(r1,c1,r2,c2);
+    sBad();
+    return;
+  }
+  sSwap();
+  if(movesLeft!==null){ movesLeft--; el("movesVal").textContent=movesLeft; }
+  busy=true;
+  renderBoard();
+  setTimeout(()=>resolveMatches(), 120);
+}
+
+function findMatches(){
+  const m = new Set();
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE-2;c++){
+    const s=grid[r][c];
+    if(s && s===grid[r][c+1] && s===grid[r][c+2]){ m.add(r+"_"+c); m.add(r+"_"+(c+1)); m.add(r+"_"+(c+2)); }
+  }
+  for(let c=0;c<SIZE;c++) for(let r=0;r<SIZE-2;r++){
+    const s=grid[r][c];
+    if(s && s===grid[r+1][c] && s===grid[r+2][c]){ m.add(r+"_"+c); m.add((r+1)+"_"+c); m.add((r+2)+"_"+c); }
+  }
+  return m;
+}
+
+function resolveMatches(){
+  const matches = findMatches();
+  if(matches.size===0){ busy=false; checkEndConditions(); return; }
+  sMatch(matches.size);
+  matches.forEach(k=>{
+    const [r,c]=k.split("_").map(Number);
+    const sym = grid[r][c];
+    collected[sym]=(collected[sym]||0)+1;
+    score += 10;
+    const ce = cellEl(r,c);
+    if(ce) ce.classList.add("pop");
+    grid[r][c]=null;
+  });
+  el("scoreVal").textContent=score;
+  setTimeout(()=>{
+    dropAndFill();
+    renderBoard();
+    setTimeout(resolveMatches, 200);
+  }, 220);
+}
+
+function dropAndFill(){
+  for(let c=0;c<SIZE;c++){
+    let stack=[];
+    for(let r=SIZE-1;r>=0;r--) if(grid[r][c]!==null) stack.push(grid[r][c]);
+    for(let r=SIZE-1;r>=0;r--){
+      grid[r][c] = stack.length ? stack.shift() : SYMS[Math.floor(Math.random()*SYMS.length)];
+    }
+  }
+}
+
+function checkEndConditions(){
+  if(!curLevel){
+    if(movesLeft!==null && movesLeft<=0) return; // infinite: no end
+    return;
+  }
+  let won=false;
+  if(curLevel.type==="score" && score>=curLevel.target) won=true;
+  if(curLevel.type==="collect" && (collected[curLevel.sym]||0)>=curLevel.target) won=true;
+
+  if(won){
+    sWin();
+    if(curLevel.n>=unlocked()) setUnlocked(Math.min(15,curLevel.n+1));
+    el("overlayTitle").textContent="🎉 Уровень пройден!";
+    el("overlayText").textContent="Счёт: "+score;
+    el("overlayMain").textContent = curLevel.n<15 ? "Следующий уровень" : "Играть снова";
+    el("overlayMain").onclick = () => {
+      const next = LEVELS.find(l=>l.n===curLevel.n+1);
+      startGame(next || curLevel);
+    };
+    el("overlay").classList.remove("hidden");
+    return;
+  }
+  if(movesLeft!==null && movesLeft<=0){
+    sLose();
+    el("overlayTitle").textContent="😕 Ходы закончились";
+    const need = curLevel.type==="score" ? (curLevel.target-score)+" очков" : (curLevel.target-(collected[curLevel.sym]||0))+" × "+curLevel.sym;
+    el("overlayText").textContent="Не хватило: "+need;
+    el("overlayMain").textContent="Попробовать снова";
+    el("overlayMain").onclick = () => startGame(curLevel);
+    el("overlay").classList.remove("hidden");
+  }
+}
+
+show("startScreen");
+})();
+</script>
+</body>
+</html>
